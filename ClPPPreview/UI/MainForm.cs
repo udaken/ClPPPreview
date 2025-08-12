@@ -54,14 +54,20 @@ public partial class MainForm : Form
         textBoxOutput.Font = new Font("Consolas", 9F, FontStyle.Regular);
         textBoxOutput.BackColor = SystemColors.Control;
         
+        // Enable drag and drop for source code text box
+        textBoxSourceCode.AllowDrop = true;
+        
         // Set initial source code if empty
         if (string.IsNullOrWhiteSpace(textBoxSourceCode.Text))
         {
             textBoxSourceCode.Text = "#include <iostream>\r\n#include <cstdlib>\r\n\r\nint main()\r\n{\r\n    std::cout << \"Hello, World!\" << std::endl;\r\n    return 0;\r\n}";
         }
         
-        // Update button text
-        button1.Text = "Browse...";
+        // Initialize help button if it exists
+        if (buttonHelp != null)
+        {
+            buttonHelp.Text = "cl.exe Help";
+        }
         
         // Set initial status
         UpdateStatus("Ready");
@@ -74,8 +80,18 @@ public partial class MainForm : Form
         textBoxBuildToolPath.TextChanged += OnBuildToolPathChanged;
         textBoxCommandLine.TextChanged += OnCommandLineChanged;
         
+        // Drag and drop events for source code text box
+        textBoxSourceCode.DragEnter += OnSourceCodeDragEnter;
+        textBoxSourceCode.DragDrop += OnSourceCodeDragDrop;
+        
         // Button events
         button1.Click += OnBrowseButtonClick;
+        
+        // Help button event (if buttonHelp exists)
+        if (buttonHelp != null)
+        {
+            buttonHelp.Click += OnHelpButtonClick;
+        }
         
         // Form events
         this.FormClosing += OnFormClosing;
@@ -89,6 +105,12 @@ public partial class MainForm : Form
     {
         textBoxBuildToolPath.Text = _config.BuildToolPath;
         textBoxCommandLine.Text = _config.CommandLineArgs;
+        
+        // Load VsDevCmd path if textBoxVsDevCmdPath exists
+        if (textBoxVsDevCmdPath != null)
+        {
+            textBoxVsDevCmdPath.Text = _config.VsDevCmdPath;
+        }
         
         // Validate build tool path on startup
         ValidateBuildToolPath();
@@ -147,6 +169,105 @@ public partial class MainForm : Form
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
             }
+        }
+    }
+
+    private async void OnHelpButtonClick(object? sender, EventArgs e)
+    {
+        try
+        {
+            UpdateStatus("Getting cl.exe help...");
+            
+            var result = await _preprocessorService.GetCompilerHelpAsync(_config);
+            
+            if (result.Success)
+            {
+                textBoxOutput.Text = result.Output;
+                UpdateStatus($"Help retrieved successfully ({result.Duration.TotalMilliseconds:F0}ms)");
+            }
+            else
+            {
+                var errorMessage = result.GetErrorMessage();
+                textBoxOutput.Text = $"// Failed to get cl.exe help\r\n// {errorMessage}\r\n\r\n{result.ErrorOutput}";
+                UpdateStatus("Help retrieval failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            textBoxOutput.Text = $"// Error getting cl.exe help\r\n// {ex.Message}";
+            UpdateStatus("Help error occurred");
+            System.Diagnostics.Debug.WriteLine($"Help button error: {ex}");
+        }
+    }
+
+    private void OnShowIncludePathsClick(object? sender, EventArgs e)
+    {
+        try
+        {
+            var includePathInfo = _preprocessorService.GetIncludePathInfo(_config);
+            textBoxOutput.Text = includePathInfo;
+            UpdateStatus("Include path information displayed");
+        }
+        catch (Exception ex)
+        {
+            textBoxOutput.Text = $"// Error getting include path info\r\n// {ex.Message}";
+            UpdateStatus("Include path error occurred");
+            System.Diagnostics.Debug.WriteLine($"Include path info error: {ex}");
+        }
+    }
+
+    private void OnSourceCodeDragEnter(object? sender, DragEventArgs e)
+    {
+        // Check if the dragged data contains file(s)
+        if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true)
+        {
+            var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+            if (files != null && files.Length > 0)
+            {
+                var file = files[0];
+                var extension = Path.GetExtension(file).ToLowerInvariant();
+                
+                // Accept common C/C++ file extensions
+                if (extension is ".c" or ".cpp" or ".cxx" or ".cc" or ".h" or ".hpp" or ".hxx" or ".txt")
+                {
+                    e.Effect = DragDropEffects.Copy;
+                    return;
+                }
+            }
+        }
+        
+        e.Effect = DragDropEffects.None;
+    }
+
+    private void OnSourceCodeDragDrop(object? sender, DragEventArgs e)
+    {
+        try
+        {
+            if (e.Data?.GetDataPresent(DataFormats.FileDrop) == true)
+            {
+                var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                if (files != null && files.Length > 0)
+                {
+                    var filePath = files[0];
+                    
+                    // Read file content
+                    var content = File.ReadAllText(filePath);
+                    textBoxSourceCode.Text = content;
+                    
+                    UpdateStatus($"Loaded file: {Path.GetFileName(filePath)}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus("Error loading file");
+            MessageBox.Show(
+                $"Failed to load file:\n{ex.Message}",
+                "File Load Error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            
+            System.Diagnostics.Debug.WriteLine($"Drag drop error: {ex}");
         }
     }
 

@@ -12,6 +12,14 @@ public class PreprocessorConfig
     /// </summary>
     [Required]
     public string BuildToolPath { get; set; } = string.Empty;
+    /// <summary>
+    /// Path to VsDevCmd.bat for setting up Visual Studio environment
+    /// </summary>
+    public string VsDevCmdPath { get; set; } = string.Empty;
+    /// <summary>
+    /// Whether to automatically add standard MSVC and Windows SDK include paths
+    /// </summary>
+    public bool AutoIncludePaths { get; set; } = true;
 
     /// <summary>
     /// Command line arguments to pass to cl.exe

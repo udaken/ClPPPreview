@@ -127,7 +127,7 @@ partial class MainForm
         button1.Name = "button1";
         button1.Size = new Size(112, 34);
         button1.TabIndex = 2;
-        button1.Text = "Browse";
+        button1.Text = "Browse...";
         button1.UseVisualStyleBackColor = true;
         // 
         // splitContainer1
@@ -152,6 +152,7 @@ partial class MainForm
         textBoxSourceCode.AcceptsReturn = true;
         textBoxSourceCode.AcceptsTab = true;
         textBoxSourceCode.Dock = DockStyle.Fill;
+        textBoxSourceCode.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
         textBoxSourceCode.Location = new Point(0, 0);
         textBoxSourceCode.Multiline = true;
         textBoxSourceCode.Name = "textBoxSourceCode";
@@ -163,6 +164,7 @@ partial class MainForm
         // textBoxOutput
         // 
         textBoxOutput.Dock = DockStyle.Fill;
+        textBoxOutput.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
         textBoxOutput.Location = new Point(0, 0);
         textBoxOutput.Multiline = true;
         textBoxOutput.Name = "textBoxOutput";
@@ -203,8 +205,10 @@ partial class MainForm
     private FlowLayoutPanel flowLayoutPanel1;
     private Label label1;
     private TextBox textBoxBuildToolPath;
+    private TextBox textBoxVsDevCmdPath;
     private SplitContainer splitContainer1;
     private Button button1;
+    private Button buttonHelp;
     private TextBox textBoxSourceCode;
     private TextBox textBoxOutput;
     private FolderBrowserDialog folderBrowserDialog1;

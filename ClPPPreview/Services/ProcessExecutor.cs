@@ -160,6 +160,29 @@ public class ProcessExecutor : IDisposable
     }
 
     /// <summary>
+    /// Executes a command with Visual Studio environment setup via VsDevCmd.bat
+    /// </summary>
+    public async Task<ProcessResult> ExecuteWithVsEnvironmentAsync(
+        string vsDevCmdPath,
+        string executable,
+        string arguments,
+        string workingDirectory,
+        CancellationToken cancellationToken = default,
+        int timeoutMs = 30000)
+    {
+        if (string.IsNullOrWhiteSpace(vsDevCmdPath) || !File.Exists(vsDevCmdPath))
+        {
+            // Fallback to normal execution if VsDevCmd.bat is not available
+            return await ExecuteAsync(executable, arguments, workingDirectory, cancellationToken, timeoutMs);
+        }
+
+        // Create a batch command that runs VsDevCmd.bat first, then the target command
+        var batchCommand = $"\"\"{vsDevCmdPath}\" && \"{executable}\" {arguments}\"";
+        
+        return await ExecuteAsync("cmd.exe", $"/c {batchCommand}", workingDirectory, cancellationToken, timeoutMs);
+    }
+
+    /// <summary>
     /// Executes a simple command and returns only the output
     /// </summary>
     /// <param name="executable">Path to executable</param>

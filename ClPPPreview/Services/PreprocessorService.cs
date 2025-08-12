@@ -54,16 +54,31 @@ public class PreprocessorService : IDisposable
 
             try
             {
-                // Build command line arguments
-                var arguments = BuildCommandLineArguments(config.CommandLineArgs, sourceFilePath);
+                // Build command line arguments including the source file
+                var arguments = BuildCommandLineArguments(config, sourceFilePath);
 
-                // Execute cl.exe
-                var processResult = await _processExecutor.ExecuteAsync(
-                    config.BuildToolPath,
-                    arguments,
-                    Path.GetDirectoryName(sourceFilePath)!,
-                    cancellationToken,
-                    30000); // 30 second timeout
+                // Execute cl.exe with VsDevCmd environment if available
+                ProcessResult processResult;
+                if (!string.IsNullOrWhiteSpace(config.VsDevCmdPath) && File.Exists(config.VsDevCmdPath))
+                {
+                    processResult = await _processExecutor.ExecuteWithVsEnvironmentAsync(
+                        config.VsDevCmdPath,
+                        config.BuildToolPath,
+                        arguments,
+                        Path.GetDirectoryName(sourceFilePath)!,
+                        cancellationToken,
+                        30000); // 30 second timeout
+                }
+                else
+                {
+                    // Fallback to normal execution
+                    processResult = await _processExecutor.ExecuteAsync(
+                        config.BuildToolPath,
+                        arguments,
+                        Path.GetDirectoryName(sourceFilePath)!,
+                        cancellationToken,
+                        30000); // 30 second timeout
+                }
 
                 // Parse results
                 result.Success = processResult.Success;
@@ -111,6 +126,147 @@ public class PreprocessorService : IDisposable
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Gets help information for cl.exe compiler
+    /// </summary>
+    public async Task<PreprocessResult> GetCompilerHelpAsync(
+        PreprocessorConfig config,
+        CancellationToken cancellationToken = default)
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(PreprocessorService));
+
+        var result = new PreprocessResult
+        {
+            StartTime = DateTime.UtcNow
+        };
+
+        try
+        {
+            // Validate that we have a valid cl.exe path
+            if (string.IsNullOrWhiteSpace(config.BuildToolPath) || !File.Exists(config.BuildToolPath))
+            {
+                result.Success = false;
+                result.ErrorOutput = "Invalid or missing cl.exe path. Please configure the build tool path.";
+                result.ExitCode = -1;
+                return result;
+            }
+
+            // Execute cl.exe with /? to get help
+            ProcessResult processResult;
+            if (!string.IsNullOrWhiteSpace(config.VsDevCmdPath) && File.Exists(config.VsDevCmdPath))
+            {
+                processResult = await _processExecutor.ExecuteWithVsEnvironmentAsync(
+                    config.VsDevCmdPath,
+                    config.BuildToolPath,
+                    "/?",
+                    Environment.CurrentDirectory,
+                    cancellationToken,
+                    10000); // 10 second timeout
+            }
+            else
+            {
+                processResult = await _processExecutor.ExecuteAsync(
+                    config.BuildToolPath,
+                    "/?",
+                    Environment.CurrentDirectory,
+                    cancellationToken,
+                    10000); // 10 second timeout
+            }
+
+            // cl.exe help is typically output to stderr, not stdout
+            result.Success = true;
+            result.Output = !string.IsNullOrWhiteSpace(processResult.StandardOutput) 
+                ? processResult.StandardOutput 
+                : processResult.StandardError;
+            result.ErrorOutput = processResult.StandardError;
+            result.ExitCode = processResult.ExitCode;
+            result.Duration = processResult.Duration;
+
+            // If no output, provide a fallback message
+            if (string.IsNullOrWhiteSpace(result.Output))
+            {
+                result.Output = "// cl.exe help information was not available\r\n// Try running 'cl.exe /?' manually in a Developer Command Prompt";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            result.Success = false;
+            result.ErrorOutput = "Help operation was cancelled";
+            result.ExitCode = -1;
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorOutput = $"Failed to get help: {ex.Message}";
+            result.ExitCode = -1;
+            
+            System.Diagnostics.Debug.WriteLine($"Help operation exception: {ex}");
+        }
+        finally
+        {
+            result.Duration = DateTime.UtcNow - result.StartTime;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets information about include paths being used
+    /// </summary>
+    public string GetIncludePathInfo(PreprocessorConfig config)
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(PreprocessorService));
+
+        try
+        {
+            if (!config.AutoIncludePaths)
+            {
+                return "// Automatic include paths are disabled\r\n// Only user-specified include paths will be used";
+            }
+
+            if (string.IsNullOrWhiteSpace(config.BuildToolPath) || !File.Exists(config.BuildToolPath))
+            {
+                return "// Cannot determine include paths: cl.exe path is invalid";
+            }
+
+            var configManager = new ConfigManager();
+            var msvcPaths = configManager.FindMsvcIncludePaths(config.BuildToolPath);
+            var sdkPaths = configManager.FindWindowsSdkIncludePaths();
+            var includeArgs = configManager.BuildIncludePathArguments(config.BuildToolPath);
+
+            var info = new StringBuilder();
+            info.AppendLine("// Include Path Configuration");
+            info.AppendLine($"// Auto Include Paths: {(config.AutoIncludePaths ? "Enabled" : "Disabled")}");
+            info.AppendLine($"// cl.exe Path: {config.BuildToolPath}");
+            info.AppendLine();
+
+            info.AppendLine("// MSVC Include Paths:");
+            foreach (var path in msvcPaths)
+            {
+                info.AppendLine($"//   {path}");
+            }
+
+            info.AppendLine();
+            info.AppendLine("// Windows SDK Include Paths:");
+            foreach (var path in sdkPaths)
+            {
+                info.AppendLine($"//   {path}");
+            }
+
+            info.AppendLine();
+            info.AppendLine("// Generated Include Arguments:");
+            info.AppendLine($"// {includeArgs}");
+
+            return info.ToString();
+        }
+        catch (Exception ex)
+        {
+            return $"// Error getting include path info: {ex.Message}";
+        }
     }
 
     /// <summary>
@@ -267,18 +423,31 @@ public class PreprocessorService : IDisposable
     /// <param name="userArgs">User-specified arguments</param>
     /// <param name="sourceFile">Path to source file</param>
     /// <returns>Complete argument string</returns>
-    private static string BuildCommandLineArguments(string userArgs, string sourceFile)
+    private string BuildCommandLineArguments(PreprocessorConfig config, string sourceFile)
     {
         var args = new List<string>();
 
         // Always add /nologo to reduce noise
         args.Add("/nologo");
 
+        // Add automatic include paths if enabled
+        if (config.AutoIncludePaths && !string.IsNullOrWhiteSpace(config.BuildToolPath))
+        {
+            var configManager = new ConfigManager();
+            var includePathArgs = configManager.BuildIncludePathArguments(config.BuildToolPath);
+            if (!string.IsNullOrWhiteSpace(includePathArgs))
+            {
+                // Split include arguments and add them
+                var includeArgsList = SplitCommandLineArgs(includePathArgs);
+                args.AddRange(includeArgsList);
+            }
+        }
+
         // Add user arguments if specified
-        if (!string.IsNullOrWhiteSpace(userArgs))
+        if (!string.IsNullOrWhiteSpace(config.CommandLineArgs))
         {
             // Split user arguments properly (respecting quoted strings)
-            var userArgsList = SplitCommandLineArgs(userArgs);
+            var userArgsList = SplitCommandLineArgs(config.CommandLineArgs);
             args.AddRange(userArgsList);
         }
         else
@@ -288,10 +457,10 @@ public class PreprocessorService : IDisposable
             args.Add("/C");  // Preserve comments
         }
 
-        // Source file is handled separately by ProcessExecutor
-        // We don't add it here as it will be passed as a separate parameter
+        // Add source file as the last argument
+        args.Add(QuoteArgumentIfNeeded(sourceFile));
 
-        return string.Join(" ", args.Append("/utf-8").Append(sourceFile).Select(QuoteArgumentIfNeeded));
+        return string.Join(" ", args.Select(QuoteArgumentIfNeeded));
     }
 
     /// <summary>
