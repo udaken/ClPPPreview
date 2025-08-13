@@ -37,7 +37,7 @@ partial class MainForm
         textBoxBuildToolPath = new TextBox();
         button1 = new Button();
         splitContainer1 = new SplitContainer();
-        textBoxSourceCode = new TextBox();
+        textBoxSourceCode = new RichTextBox();
         textBoxOutput = new TextBox();
         folderBrowserDialog1 = new FolderBrowserDialog();
         tableLayoutPanel1.SuspendLayout();
@@ -149,14 +149,14 @@ partial class MainForm
         // 
         // textBoxSourceCode
         // 
-        textBoxSourceCode.AcceptsReturn = true;
+        // textBoxSourceCode.AcceptsReturn = true; // Not available in RichTextBox
         textBoxSourceCode.AcceptsTab = true;
         textBoxSourceCode.Dock = DockStyle.Fill;
         textBoxSourceCode.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
         textBoxSourceCode.Location = new Point(0, 0);
         textBoxSourceCode.Multiline = true;
         textBoxSourceCode.Name = "textBoxSourceCode";
-        textBoxSourceCode.ScrollBars = ScrollBars.Vertical;
+        textBoxSourceCode.ScrollBars = RichTextBoxScrollBars.Vertical;
         textBoxSourceCode.Size = new Size(447, 822);
         textBoxSourceCode.TabIndex = 0;
         textBoxSourceCode.Text = "#include <stdio.h>\r\n\r\nint main()\r\n{\r\n    printf(\"Hello, World!\");\r\n}";
@@ -209,7 +209,7 @@ partial class MainForm
     private SplitContainer splitContainer1;
     private Button button1;
     private Button buttonHelp;
-    private TextBox textBoxSourceCode;
+    private RichTextBox textBoxSourceCode;
     private TextBox textBoxOutput;
     private FolderBrowserDialog folderBrowserDialog1;
 }

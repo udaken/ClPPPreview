@@ -20,6 +20,10 @@ public class PreprocessorConfig
     /// Whether to automatically add standard MSVC and Windows SDK include paths
     /// </summary>
     public bool AutoIncludePaths { get; set; } = true;
+    /// <summary>
+    /// Syntax highlighting configuration
+    /// </summary>
+    public SyntaxHighlightingConfig SyntaxHighlighting { get; set; } = new();
 
     /// <summary>
     /// Command line arguments to pass to cl.exe

@@ -9,6 +9,7 @@ public partial class MainForm : Form
     private readonly PreprocessorService _preprocessorService;
     private readonly ConfigManager _configManager;
     private readonly DebounceTimer _debounceTimer;
+    private readonly CppSyntaxHighlighter _syntaxHighlighter;
     private PreprocessorConfig _config;
     private CancellationTokenSource? _preprocessingCancellation;
     private bool _isProcessing = false;
@@ -26,6 +27,9 @@ public partial class MainForm : Form
         
         // Initialize debounce timer
         _debounceTimer = new DebounceTimer(OnDebounceTimerElapsed, _config.DebounceDelayMs);
+        
+        // Initialize syntax highlighter
+        _syntaxHighlighter = new CppSyntaxHighlighter(textBoxSourceCode);
         
         // Initialize UI
         InitializeUI();
@@ -62,6 +66,9 @@ public partial class MainForm : Form
         {
             textBoxSourceCode.Text = "#include <iostream>\r\n#include <cstdlib>\r\n\r\nint main()\r\n{\r\n    std::cout << \"Hello, World!\" << std::endl;\r\n    return 0;\r\n}";
         }
+        
+        // Apply initial syntax highlighting immediately (no debounce needed)
+        _syntaxHighlighter.HighlightSyntaxImmediate();
         
         // Initialize help button if it exists
         if (buttonHelp != null)
@@ -120,6 +127,9 @@ public partial class MainForm : Form
     {
         if (_isProcessing)
             return;
+
+        // Apply syntax highlighting
+        _syntaxHighlighter.HighlightSyntax();
 
         // Trigger debounced preprocessing
         _debounceTimer.Trigger();
@@ -254,6 +264,9 @@ public partial class MainForm : Form
                     var content = File.ReadAllText(filePath);
                     textBoxSourceCode.Text = content;
                     
+                    // Apply syntax highlighting immediately for file loading
+                    _syntaxHighlighter.HighlightSyntaxImmediate();
+                    
                     UpdateStatus($"Loaded file: {Path.GetFileName(filePath)}");
                 }
             }
@@ -322,16 +335,53 @@ public partial class MainForm : Form
             if (_preprocessingCancellation.Token.IsCancellationRequested)
                 return;
 
+            // Parse errors from compiler output
+            var errors = CompilerErrorParser.ParseErrors(result.ErrorOutput);
+            var errorLines = CompilerErrorParser.GetErrorLineNumbers(errors, errorsOnly: false);
+
+            // Clear previous error highlighting
+            _syntaxHighlighter.HighlightSyntax();
+
             if (result.Success)
             {
+                // Show successful preprocessing result
                 textBoxOutput.Text = result.Output;
-                UpdateStatus($"Completed successfully ({result.Duration.TotalMilliseconds:F0}ms)");
+                
+                // Highlight any warnings
+                if (errorLines.Any())
+                {
+                    _syntaxHighlighter.HighlightErrors(errorLines);
+                    var summary = CompilerErrorParser.CreateErrorSummary(errors);
+                    UpdateStatus($"Completed with {summary} ({result.Duration.TotalMilliseconds:F0}ms)");
+                }
+                else
+                {
+                    UpdateStatus($"Completed successfully ({result.Duration.TotalMilliseconds:F0}ms)");
+                }
             }
             else
             {
-                var errorMessage = result.GetErrorMessage();
-                textBoxOutput.Text = $"// Preprocessing failed\r\n// {errorMessage}\r\n\r\n{result.ErrorOutput}";
-                UpdateStatus("Processing failed");
+                // Show compilation errors
+                var formattedErrors = CompilerErrorParser.FormatErrorsForDisplay(errors);
+                
+                if (errors.Any())
+                {
+                    // Display parsed errors in a user-friendly format
+                    textBoxOutput.Text = formattedErrors + "\r\n\r\n// Raw compiler output:\r\n" + result.ErrorOutput;
+                    
+                    // Highlight error lines in source code
+                    _syntaxHighlighter.HighlightErrors(errorLines);
+                    
+                    var summary = CompilerErrorParser.CreateErrorSummary(errors);
+                    UpdateStatus($"Processing failed: {summary}");
+                }
+                else
+                {
+                    // Fallback for unparseable errors
+                    var errorMessage = result.GetErrorMessage();
+                    textBoxOutput.Text = $"// Preprocessing failed\r\n// {errorMessage}\r\n\r\n{result.ErrorOutput}";
+                    UpdateStatus("Processing failed");
+                }
             }
         }
         catch (OperationCanceledException)
@@ -433,6 +483,7 @@ public partial class MainForm : Form
         // Dispose of services
         _debounceTimer?.Dispose();
         _preprocessorService?.Dispose();
+        _syntaxHighlighter?.Dispose();
     }
 
     private void OnFormResizeEnd(object? sender, EventArgs e)
