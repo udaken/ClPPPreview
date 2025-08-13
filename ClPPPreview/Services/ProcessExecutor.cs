@@ -32,9 +32,6 @@ public class ProcessExecutor : IDisposable
         if (string.IsNullOrWhiteSpace(executable))
             throw new ArgumentException("Executable path cannot be null or empty", nameof(executable));
 
-        if (!File.Exists(executable))
-            throw new FileNotFoundException($"Executable not found: {executable}");
-
         Process? process = null;
         var result = new ProcessResult();
         var startTime = DateTime.UtcNow;
@@ -177,7 +174,7 @@ public class ProcessExecutor : IDisposable
         }
 
         // Create a batch command that runs VsDevCmd.bat first, then the target command
-        var batchCommand = $"\"\"{vsDevCmdPath}\" && \"{executable}\" {arguments}\"";
+        var batchCommand = $"\"\"{vsDevCmdPath}\" /no_logo && \"{executable}\" {arguments}\"";
         
         return await ExecuteAsync("cmd.exe", $"/c {batchCommand}", workingDirectory, cancellationToken, timeoutMs);
     }

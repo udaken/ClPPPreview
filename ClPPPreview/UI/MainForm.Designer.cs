@@ -56,7 +56,7 @@ partial class MainForm
         label1.Name = "label1";
         label1.Size = new Size(128, 25);
         label1.TabIndex = 1;
-        label1.Text = "Build Tool Path";
+        label1.Text = "&Build Tool Path";
         // 
         // label2
         // 
@@ -65,7 +65,7 @@ partial class MainForm
         label2.Name = "label2";
         label2.Size = new Size(132, 25);
         label2.TabIndex = 1;
-        label2.Text = "Command Line";
+        label2.Text = "&Command Line";
         // 
         // tableLayoutPanel1
         // 

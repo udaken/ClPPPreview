@@ -71,6 +71,9 @@ public class PreprocessorService : IDisposable
                 }
                 else
                 {
+                    if (!File.Exists(config.BuildToolPath))
+                        throw new FileNotFoundException($"Executable not found: {config.BuildToolPath}");
+
                     // Fallback to normal execution
                     processResult = await _processExecutor.ExecuteAsync(
                         config.BuildToolPath,
